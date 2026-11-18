@@ -2106,6 +2106,19 @@ function settingsTablesEmpty(tables) {
 // 規約がまだ入っていないときの知らせ（「設定の読み込みを確かめる」「1. 初期設定」）
 const SETTINGS_EMPTY_MESSAGE = '規約がまだ入っていません。「規約をテキストから読み込む」で、コンテストの規約のテキストファイルを読み込んでください' +
   '（見本：JA0 VHF・新潟・ギガヘルツ。リポジトリの「規約の見本」）。';
+
+// ------------------------------------------------------------------ 交信ログの公開（指示書_交信ログの公開 の 4.。申し送り No.185）
+
+const SETTINGS_LOG_PUBLICATION_LABEL = '交信ログの公開'; // 「基本設定」の「その年の情報」の行（91_gas_books.js の BASIC_ROWS）
+// [表の言葉, 値]。'none'＝公開しない、'qso'＝交信だけ公開、'marks'＝審査の印も公開
+const SETTINGS_LOG_PUBLICATION_CHOICES = [['公開しない', 'none'], ['交信だけ公開', 'qso'], ['審査の印も公開', 'marks']];
+
+/** 「交信ログの公開」の文字を 'none'・'qso'・'marks' にする。空・知らない値は 'none'（公開しない）。全角・空白の違いは問わない */
+function settingsLogPublicationOf(text) {
+  const norm = function (v) { return toHankaku(settingsCellText(v)).replace(/\s+/g, ''); };
+  const c = SETTINGS_LOG_PUBLICATION_CHOICES.filter(function (x) { return norm(x[0]) === norm(text); })[0];
+  return c ? c[1] : 'none';
+}
 // ===== 20_judge.js =====
 /**
  * 審査エンジン
@@ -3594,6 +3607,7 @@ const BOOK_SHEETS = {
     { name: '審査結果', color: 'blue', protect: 'warning', empty: BOOK_NOT_JUDGED },
     { name: '局別一覧', color: 'blue', protect: 'warning', empty: BOOK_NOT_JUDGED },
     { name: '確定結果', color: 'blue', protect: 'owner' },
+    { name: '公開ログ', color: 'blue', protect: 'owner', header: function () { return typeof PUBLIC_LOG_HEADER !== 'undefined' ? PUBLIC_LOG_HEADER : null; } }, // 交信ログの公開（審査担当が確定のときに作る。見出しは 30_lcr.js。申し送り No.191）
     { name: '変更履歴', color: 'gray', protect: 'warning', header: function () { return ['日時', '操作した委員', '内容']; } }
   ],
   // 規約のファイル：よく変える順に左から（緑）、ほとんど変えないシートは右に（灰）。2026-11-07、指示書_テンプレートを空から始める の 2.4
@@ -3632,6 +3646,7 @@ const BOOK_LOG_FOLDER = '提出ログ'; // docs/ドライブのフォルダの�
 
 /**
  * 行の一覧。group：まとまりの見出しの行。label：項目。value：はじめの値（行がないときだけ入れる）。
+ * choices：選ぶ行のプルダウンの値（「1. 初期設定」で付ける）。
  * sample・endSample：JA0 VHF の値（テストのときだけ使う。settingsTemplateIsJa0_。コンテストごとに違う行は、テンプレートでは空にする）。
  * auto：自動で入る行（値の列の色を変える）。period：開催期間の行（B 開始・C 終了）。help：説明（D 列）
  * 行の名前は、ほかの担当の定数と同じにする（ORGANIZER_LABEL・MAIL_ACCOUNT_LABEL・CERT_SAMPLE_LABEL・GUIDE_*_LABEL・PUBLIC_REGISTRY_LABEL など）
@@ -3655,6 +3670,9 @@ const BASIC_ROWS = [
   { label: 'メールでの受付', value: '使わない', help: '初めは「使わない」（受付ページの提出だけを受け付ける。申し送り No.135）。「使う」なら、管理用アカウントのGmailに届いたメールのログを受け付ける。「使わない」なら受信トレイを読まず、受付ページ（ログ入力フォーム・アップロード）の提出だけを受け付ける' },
   { label: '受け付けるメールの宛先', value: '', help: '空なら、このGmailの受信トレイに届いたメールをすべて受け付ける（このアカウントでほかのコンテストも受け付けていると、そのログも取り込んでしまう）。ほかのコンテストと同じアカウントを使うときは、コンテストごとの宛先（例：ja0rl+ja0vhf@gmail.com）を入れると、その宛先に送られたメールだけを受け付ける' },
   { label: '受付番号の頭', value: '', sample: 'JA0VHF', help: '受付番号の「-」の前に付ける文字（例：JA0VHF とすると JA0VHF-001）。空なら 001 のように数字だけ' },
+  // 名前と選ぶ値は 11_settings.js の SETTINGS_LOG_PUBLICATION_LABEL・SETTINGS_LOG_PUBLICATION_CHOICES と同じ（このファイルは 11 なしで読まれることもあるので文字で書く）
+  { label: '交信ログの公開', value: '公開しない', choices: ['公開しない', '交信だけ公開', '審査の印も公開'],
+    help: '結果の確定後、結果ページで各局の交信ログを公開するか。公開すると、受付ページにもそのことが出ます（「交信だけ公開」は交信の行だけ、「審査の印も公開」は重複などの審査の印と得点も。名前・住所などは出しません）' },
   { group: BASIC_GROUP_FILES },
   { label: 'ファイルの種類', value: 'テンプレート', auto: true, help: 'テンプレートなら「テンプレート」、年ごとの審査用なら「審査用」。新年度の準備で作ったファイルには自動で「審査用」が入る' },
   { label: '管理用アカウント', value: '', auto: true, help: 'メールの処理・確定・初期設定などを動かせるアカウント（Googleアカウントのメールアドレス）。このファイルの持ち主と同じアカウントにする。空なら「1. 初期設定」で持ち主のアドレスが入る' },
@@ -4003,7 +4021,8 @@ function setupBasicSheet_(ss) {
   Object.keys(have).forEach(function (label) {
     if (!known[label]) rows.push([label, have[label].b, have[label].c, have[label].d]); // 一覧にない行（消さない）
   });
-  bookTry_(function () { sh.getDataRange().clearDataValidations(); });
+  // 全部のマスのプルダウンを外してから書く。表の外に残ったプルダウンに当たって止まらないように（申し送り No.192）
+  bookTry_(function () { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations(); });
   sh.clear();
   const n = rows.length;
   sh.getRange(1, 1, n, 4).setNumberFormat('@');
@@ -4017,6 +4036,8 @@ function setupBasicSheet_(ss) {
       if (!def) return;
       if (def.group) { sh.getRange(i + 1, 1, 1, 4).setBackground(BASIC_COLORS.group).setFontWeight('bold'); return; }
       if (def.auto) sh.getRange(i + 1, 2).setBackground(BASIC_COLORS.auto);
+      if (def.choices) sh.getRange(i + 1, 2).setDataValidation(SpreadsheetApp.newDataValidation() // 選ぶ行のプルダウン（交信ログの公開）
+        .requireValueInList(def.choices, true).setAllowInvalid(false).setHelpText(def.choices.join('・') + 'から選ぶ').build());
       if (!def.period) sh.getRange(i + 1, 3).setBackground(BASIC_COLORS.unusedC);
     });
   });
@@ -4159,22 +4180,43 @@ function setupSettingsSheets_(ss) {
   cfg.opTerms = terms;
   const tables = settingsTablesFromConfig(cfg);
   Object.keys(tables).forEach(function (name) {
-    const rows = tables[name];
-    let sh = ss.getSheetByName(name);
-    if (sh) migrateSettingsWords_(sh, name, terms); // もう一つの呼び方の言葉を、選んだ呼び方の言葉にする。足りない行を足す前に行う
-    if (!sh) {
-      sh = ss.insertSheet(name);
-      sh.getRange(1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
-      sh.getRange(1, 1, 1, rows[0].length).setFontWeight('bold');
-      sh.setFrozenRows(1);
-      SETTINGS_HEADERS[name].forEach(function (h, i) { sh.getRange(1, i + 1).setNote(h[1]); });
-    } else if (name === SETTINGS_SHEETS.basic || name === SETTINGS_SHEETS.divisions) {
-      addMissingSettingsRows_(sh, rows, name === SETTINGS_SHEETS.basic ? ['項目'] : ['部門', '項目']);
-    } else if (SETTINGS_OPTIONAL_COLUMNS[name]) {
-      addMissingSettingsColumns_(sh, name); // 前の版の「規約_種目」に「モード」「開催部門」の列を足す（11_settings.js）
+    try {
+      setupSettingsSheet_(ss, name, tables[name], terms);
+    } catch (e) { // どのシートで何が起きたかが分かる知らせにする（入力規則の説明の文だけが出ないように。申し送り No.192）
+      throw new Error('規約のファイルの「' + name + '」シートを整えられませんでした（' + String(e && e.message || e).replace(/^Exception:\s*/, '') + '）。' +
+        'シートの中身（とくに値の列）が、選べる値になっているかを確かめてから、もう一度「1. 初期設定」を実行してください');
     }
-    setupSettingsDropdowns_(sh, name, terms);
   });
+}
+
+/**
+ * 規約のファイルの1枚のシートを整える（setupSettingsSheets_ から）。ないシートは作る。あるシートは、まず全部のマスのプルダウン（入力規則）を外してから、
+ * 言葉の書き換え・足りない行や列の足し込みをし、最後にプルダウンを付け直す。
+ * プルダウンが付いたままだと、前の呼び方の一覧（例：「個人・社団」）にない値（「シングルオペ」）を書けずに止まるため（申し送り No.192）
+ */
+function setupSettingsSheet_(ss, name, rows, terms) {
+  let sh = ss.getSheetByName(name);
+  if (sh) {
+    settingsClearAllValidations_(sh);
+    migrateSettingsWords_(sh, name, terms); // もう一つの呼び方の言葉を、選んだ呼び方の言葉にする。足りない行を足す前に行う
+  }
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
+    sh.getRange(1, 1, 1, rows[0].length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    SETTINGS_HEADERS[name].forEach(function (h, i) { sh.getRange(1, i + 1).setNote(h[1]); });
+  } else if (name === SETTINGS_SHEETS.basic || name === SETTINGS_SHEETS.divisions) {
+    addMissingSettingsRows_(sh, rows, name === SETTINGS_SHEETS.basic ? ['項目'] : ['部門', '項目']);
+  } else if (SETTINGS_OPTIONAL_COLUMNS[name]) {
+    addMissingSettingsColumns_(sh, name); // 前の版の「規約_種目」に「モード」「開催部門」の列を足す（11_settings.js）
+  }
+  setupSettingsDropdowns_(sh, name, terms);
+}
+
+/** シートの全部のマス（中身のない所も）のプルダウン（入力規則）を外す */
+function settingsClearAllValidations_(sh) {
+  bookTry_(function () { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations(); });
 }
 
 /** 規約のファイル（ss）の「規約_基本」の「シングルオペ・マルチオペの呼び方」（'individualClub'・'singleMulti'）。行がない・空・読めないなら「個人／社団」 */
@@ -4456,7 +4498,7 @@ function settingsWriteTables_(ss, sss, tables) {
   SETTINGS_TEXT_SHEETS.forEach(function (name) {
     const rows = tables[name];
     let sh = sss.getSheetByName(name) || sss.insertSheet(name);
-    bookTry_(function () { sh.getDataRange().clearDataValidations(); });
+    settingsClearAllValidations_(sh); // 中身のない所に残ったプルダウンにも当たらないように（No.192）
     sh.clear();
     const w = Math.max.apply(null, rows.map(function (r) { return r.length; }));
     const vals = rows.map(function (r) { const x = r.map(settingsCellText); while (x.length < w) x.push(''); return x; });
@@ -4535,6 +4577,14 @@ function menuExportSettingsText() {
     '<a href="' + escapeHtml_(out.getUrl()) + '" target="_blank">' + escapeHtml_(name) + '</a></div>').setWidth(460).setHeight(140);
   SpreadsheetApp.getUi().showModalDialog(html, '規約をテキストに書き出す');
 }
+
+/**
+ * 審査のファイル ss の「基本設定」の「交信ログの公開」（指示書_交信ログの公開 の 4.）。'none'＝公開しない、'qso'＝交信だけ公開、
+ * 'marks'＝審査の印も公開。行がない・空・知らない値は 'none'。Webページからも、ほかの年の審査のファイルを渡して使える
+ */
+function settingsLogPublicationFor_(ss) {
+  return settingsLogPublicationOf(settingsBasicValue_(ss, SETTINGS_LOG_PUBLICATION_LABEL));
+}
 // ===== 60_public_page.js =====
 /**
  * 受付ページの中身（GASとNodeの両方で動く部分）
@@ -4579,6 +4629,8 @@ const PUBLIC_NOTE_OPEN_NO_MAIL = '受付の状況です。ログを出し直し�
   '載っていない場合や、種目が違う場合は、委員会にお問い合わせください。';
 // 規約がまだ入っていないとき（空のテンプレートから作った年で、規約を読み込む前。申し送り No.182）
 const PUBLIC_NOT_READY = '受付の準備中です。ログの入力・提出は、準備ができてから、このページでできるようになります。';
+// 「基本設定」の「交信ログの公開」が「公開しない」でないときに、受付ページに出す知らせ（指示書_交信ログの公開 の 6.2。申し送り No.187）
+const PUBLIC_LOG_NOTICE = 'このコンテストでは、結果の確定後、提出された交信ログ（交信の部分だけ。名前・住所などは出しません）を結果ページで公開します。';
 const PUBLIC_NOTE_CLOSED = 'Rawスコアは、参加者がサマリーシートに書いた申告総得点のままです。審査で変わることがあります。';
 
 /** 「項目・値」の表のシートから、項目の値を読む（なければ空） */
@@ -4925,6 +4977,7 @@ function buildPublicPageHtml(d, baseUrl) {
     (d.deadline ? '　受付締切：' + e(d.deadline) : '') + '</div>');
   H.push('<div class="meta">最終更新：' + (d.lastReceived ? e(d.lastReceived) : '（まだ受付がありません）') +
     '　／　受付局数：' + publicStationCount(d.stations) + ' 局' + (d.hasSection ? '（のべ ' + d.stations.length + ' 件）' : '') + '</div>');
+  if (d.logPublic) H.push('<div class="note">' + publicEscape(PUBLIC_LOG_NOTICE) + '</div>'); // 交信ログの公開（No.187）
   H.push('<div class="note">' + (d.notReady ? publicEscape(PUBLIC_NOT_READY) : d.closed ? PUBLIC_NOTE_CLOSED : d.mailUse === false ? PUBLIC_NOTE_OPEN_NO_MAIL : PUBLIC_NOTE_OPEN) + '</div>');
   // 電子ログのアップロードとログ入力フォームへの切り替え（受付期間中だけ。formReady はフォームが使えるときに 61_gas_public_page.js が入れる）。
   // ページは移らずに、同じページの中の見える中身を入れ替える（buildPublicTabsHtml。申し送り No.129）
@@ -5127,6 +5180,7 @@ function publicListPage_(notReady) {
       intake: intake.getDataRange().getDisplayValues(), now: Date.now() });
     d.formReady = typeof loadConfigFor_ === 'function'; // 規約の読み込み（設定担当 No.37）が入るまでは、フォームのリンクを出さない
     d.notReady = !!notReady;
+    d.logPublic = publicLogPublic_(ss); // 交信ログを公開する年なら、受付局リストに知らせを出す（No.187）
     const out = { title: publicPageTitle(d), html: buildPublicPageHtml(d, baseUrl), showForms: publicShowForms(d) };
     try { cache.put(key, JSON.stringify(out), PUBLIC_CACHE_SECONDS); } catch (err) { /* 大きすぎて覚えられないときは、毎回作る */ }
     return out;
@@ -5156,6 +5210,11 @@ function publicBasicValues_(ss, sh) {
 /** この受付ページのアドレス（審査のファイルの「基本設定」の「受付ページのURL」を先に使う。No.133。60_public_page.js の publicPageUrl_） */
 function publicKnownUrl_() {
   return publicPageUrl_(SpreadsheetApp.getActiveSpreadsheet(), PUBLIC_PAGE_URL_LABEL, publicServiceUrl_(), function (id) { return SpreadsheetApp.openById(id); });
+}
+
+/** その年の「基本設定」の「交信ログの公開」が「公開しない」でないか（設定担当の settingsLogPublicationFor_）。読めなければ false */
+function publicLogPublic_(ss) {
+  try { return settingsLogPublicationFor_(ss) !== 'none'; } catch (err) { return false; }
 }
 
 function publicServiceUrl_() {
@@ -5676,6 +5735,7 @@ function buildPublicFormHtml(info) {
   return '<div class="page">' + publicFormStyle_() + '<div class="narrow">' +
     '<h1>' + (info.title ? publicEscape(info.title) + '　' : '') + 'ログの入力と提出</h1>' +
     '<div class="sub">' + publicFormPeriodText(info) + '紙でロギングした方のための入力画面です</div>' +
+    (info.logPublic ? '<div class="note">' + publicEscape(PUBLIC_LOG_NOTICE) + '</div>' : '') + // 交信ログの公開（No.187）
     '<div id="app-form"><p>読み込んでいます…</p></div>' + publicFormFootHtml(info) +
     '<script>(' + publicFormClient_.toString() + ')(' + data + ');</script></div></div>';
 }
@@ -5973,6 +6033,7 @@ function publicFormContext_() {
   const num = entry.num || String(basic['開催回'] || '').replace(/^第|回$/g, '');
   const title = ((num ? '第' + num + '回 ' : '') + (entry.name || basic['コンテスト名'] || '')).trim(); // コンテスト名が空でも後ろに空白を残さない（No.182）
   const info = publicFormInfo({ cfg: cfg, basic: basic, title: title, year: entry.year, now: Date.now() });
+  info.logPublic = publicLogPublic_(ss); // 交信ログを公開する年なら、フォーム・アップロードの画面に知らせを出す（No.187）
   return { ss: ss, basic: basic, cfg: cfg, info: info, year: entry.year };
 }
 
@@ -6228,6 +6289,7 @@ function buildPublicUploadHtml(info) {
   return '<div class="page">' + publicFormStyle_() + '<div class="narrow">' +
     '<h1>' + (info.title ? publicEscape(info.title) + '　' : '') + '電子ログの提出</h1>' +
     '<div class="sub">' + publicFormPeriodText(info) + 'JARL形式の電子ログのファイルを、そのまま提出できます（テキストの貼り付けでもよい）</div>' +
+    (info.logPublic ? '<div class="note">' + publicEscape(PUBLIC_LOG_NOTICE) + '</div>' : '') + // 交信ログの公開（No.187）
     '<div id="app-upload"><p>読み込んでいます…</p></div>' + publicFormFootHtml(info) +
     '<script>(' + publicUploadClient_.toString() + ')(' + data + ');</script></div></div>';
 }

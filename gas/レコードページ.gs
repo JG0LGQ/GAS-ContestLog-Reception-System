@@ -46,6 +46,8 @@ const PUBLIC_NOTE_OPEN_NO_MAIL = '受付の状況です。ログを出し直し�
   '載っていない場合や、種目が違う場合は、委員会にお問い合わせください。';
 // 規約がまだ入っていないとき（空のテンプレートから作った年で、規約を読み込む前。申し送り No.182）
 const PUBLIC_NOT_READY = '受付の準備中です。ログの入力・提出は、準備ができてから、このページでできるようになります。';
+// 「基本設定」の「交信ログの公開」が「公開しない」でないときに、受付ページに出す知らせ（指示書_交信ログの公開 の 6.2。申し送り No.187）
+const PUBLIC_LOG_NOTICE = 'このコンテストでは、結果の確定後、提出された交信ログ（交信の部分だけ。名前・住所などは出しません）を結果ページで公開します。';
 const PUBLIC_NOTE_CLOSED = 'Rawスコアは、参加者がサマリーシートに書いた申告総得点のままです。審査で変わることがあります。';
 
 /** 「項目・値」の表のシートから、項目の値を読む（なければ空） */
@@ -392,6 +394,7 @@ function buildPublicPageHtml(d, baseUrl) {
     (d.deadline ? '　受付締切：' + e(d.deadline) : '') + '</div>');
   H.push('<div class="meta">最終更新：' + (d.lastReceived ? e(d.lastReceived) : '（まだ受付がありません）') +
     '　／　受付局数：' + publicStationCount(d.stations) + ' 局' + (d.hasSection ? '（のべ ' + d.stations.length + ' 件）' : '') + '</div>');
+  if (d.logPublic) H.push('<div class="note">' + publicEscape(PUBLIC_LOG_NOTICE) + '</div>'); // 交信ログの公開（No.187）
   H.push('<div class="note">' + (d.notReady ? publicEscape(PUBLIC_NOT_READY) : d.closed ? PUBLIC_NOTE_CLOSED : d.mailUse === false ? PUBLIC_NOTE_OPEN_NO_MAIL : PUBLIC_NOTE_OPEN) + '</div>');
   // 電子ログのアップロードとログ入力フォームへの切り替え（受付期間中だけ。formReady はフォームが使えるときに 61_gas_public_page.js が入れる）。
   // ページは移らずに、同じページの中の見える中身を入れ替える（buildPublicTabsHtml。申し送り No.129）

@@ -2105,6 +2105,19 @@ function settingsTablesEmpty(tables) {
 // 規約がまだ入っていないときの知らせ（「設定の読み込みを確かめる」「1. 初期設定」）
 const SETTINGS_EMPTY_MESSAGE = '規約がまだ入っていません。「規約をテキストから読み込む」で、コンテストの規約のテキストファイルを読み込んでください' +
   '（見本：JA0 VHF・新潟・ギガヘルツ。リポジトリの「規約の見本」）。';
+
+// ------------------------------------------------------------------ 交信ログの公開（指示書_交信ログの公開 の 4.。申し送り No.185）
+
+const SETTINGS_LOG_PUBLICATION_LABEL = '交信ログの公開'; // 「基本設定」の「その年の情報」の行（91_gas_books.js の BASIC_ROWS）
+// [表の言葉, 値]。'none'＝公開しない、'qso'＝交信だけ公開、'marks'＝審査の印も公開
+const SETTINGS_LOG_PUBLICATION_CHOICES = [['公開しない', 'none'], ['交信だけ公開', 'qso'], ['審査の印も公開', 'marks']];
+
+/** 「交信ログの公開」の文字を 'none'・'qso'・'marks' にする。空・知らない値は 'none'（公開しない）。全角・空白の違いは問わない */
+function settingsLogPublicationOf(text) {
+  const norm = function (v) { return toHankaku(settingsCellText(v)).replace(/\s+/g, ''); };
+  const c = SETTINGS_LOG_PUBLICATION_CHOICES.filter(function (x) { return norm(x[0]) === norm(text); })[0];
+  return c ? c[1] : 'none';
+}
 // ===== 20_judge.js =====
 /**
  * 審査エンジン
@@ -3930,6 +3943,51 @@ function buildRankingTable(result, options) {
  */
 const CONFIRMED_CHECKLOG_COLUMNS = ['局の一覧の種目の変更', '公開する理由'];
 
+/**
+ * 「公開ログ」シートの中身（交信ログの公開。申し送り No.186。docs/指示書_交信ログの公開.md の 5.）。
+ * 結果ページ（Web担当）が、基本設定の「交信ログの公開」が「公開しない」でないときに、この表からその局の行だけを出す。
+ * 確定のたびに、設定にかかわらず作る。元のログのファイルは結果ページでは開かない（個人の情報が出ないように）。
+ *   入れる局：確定結果に載る局（種目の順位に入る局・チェックログの局。一部チェックログの局も）。種目表にない種目の局・
+ *            開催部門の分からない局（どちらも「要確認」の一覧で、結果ではない）は入れない
+ *   1行1交信。ログに書いてあった順。交信の行の値は、ログに書かれたまま（バンド・モードなども書かれた文字のまま）
+ *   入れないもの：サマリーシートのすべて（名前・住所・メールアドレス・電話・運用地・意見・申告の得点など）、
+ *                交信の行の「マルチ」「得点」の欄（参加者が書いたもの）、電力の記号
+ *   審査の印：チェックコードを短い日本語に（PUBLIC_LOG_MARKS。呼出符号の誤りは「（正：JA0RL）」も付ける）。
+ *            印がなくても相手局のログに見つからない交信は「相手局のログになし」（減点なし）。チェックログの局は「チェックログ」
+ *   得点：その交信の審査後の点数（得点にならなければ 0）
+ * 戻り値：見出しの行と交信の行の2次元の配列（どの行も文字）
+ */
+const PUBLIC_LOG_HEADER = ['呼出符号', '開催部門', '日時', 'バンド', 'モード', '相手局', '送ったRST', '送ったナンバー', '受けたRST', '受けたナンバー', '審査の印', '得点'];
+const PUBLIC_LOG_MARKS = {
+  D: '重複', X: '呼出符号の誤り', B: '無効な呼出符号', N: 'ナンバーの誤り', I: 'バンドの記載の誤り', A: '参加種目外',
+  O: '対象外のバンド', T: '時間外', Q: '10分間ルール違反', C: 'チェックログ'
+};
+
+function buildPublicLog(result) {
+  const rows = [PUBLIC_LOG_HEADER.slice()];
+  const t = function (v) { return v == null ? '' : String(v).trim(); };
+  result.logs.forEach(function (l) {
+    if (l.sectionUnknown || (!l.isChecklog && !l.category)) return; // 結果に載らない局
+    l.qsos.forEach(function (q) {
+      const r = q.raw;
+      let mark = '';
+      if (l.isChecklog) mark = PUBLIC_LOG_MARKS.C;
+      else if (q.code) {
+        mark = PUBLIC_LOG_MARKS[q.code] || q.code;
+        if (q.code === 'X') {
+          const m = /照合では ([^\s）]+)）/.exec(q.reason || '');
+          const ok = q.correctCall || (m ? m[1] : '');
+          if (ok) mark += '（正：' + ok + '）';
+        }
+      } else if (q.nil) mark = '相手局のログになし';
+      const points = q.valid ? pointsForBand(q.band || { name: q.bandName }, result.config) : 0;
+      rows.push([l.call.full, l.section || '', (t(r.date) + ' ' + t(r.time)).trim(), t(r.band), t(r.mode), t(r.call),
+        t(r.sentRst), t(r.sentNo), t(r.rcvdRst), t(r.rcvdNo), mark, String(points)]);
+    });
+  });
+  return rows;
+}
+
 function buildConfirmedResult(values, confirmedAt, result) {
   const out = [];
   const extra = {}; // 呼出符号 → [種目の変更, 公開する理由]
@@ -4512,6 +4570,7 @@ const SHEET_HISTORY = '変更履歴';
 const SHEET_STATIONS = '局別一覧';
 const SHEET_CLUBS = '登録クラブ一覧';                 // 規約のファイル（シートの整理 G）
 const SHEET_CONFIRMED = '確定結果'; // 結果のページ（src/result/）が読む。メニュー「審査結果を確定する」で作る
+const SHEET_PUBLIC_LOG = '公開ログ'; // 交信ログの公開（結果のページが読む。確定のたびに作り直す。中身は 30_lcr.js の buildPublicLog。No.186）
 
 // マルチ一覧・登録クラブ一覧の見出し（91_gas_books.js のシートの一覧も、これを使う）。「取り込んだ日」は取り込みのたびに書く
 const IMPORT_DATE_LABEL = '取り込んだ日';
@@ -5282,8 +5341,11 @@ function menuConfirmResult() {
     while (table.length && table[table.length - 1].every(function (v) { return v === ''; })) table.pop(); // 最後の空の行は入れない（前の版と同じ形）
     const rows = buildConfirmedResult(table, at, j.result); // チェックログの表に、局の一覧の種目の変更・公開する理由を足す（No.125）
     replaceSheetValues_(bookSheet_(BOOK_JUDGE, SHEET_CONFIRMED), rows, '@');
+    // 公開ログ：確定結果に載る局の、採用したログの交信の行だけ（サマリーシートの部分は入れない）。設定にかかわらず作る（No.186）
+    const pub = buildPublicLog(j.result);
+    replaceSheetValues_(bookSheet_(BOOK_JUDGE, SHEET_PUBLIC_LOG), pub, '@');
     const n = rows.filter(function (r) { return r[0] === '局' || r[0] === 'クラブ'; }).length;
-    logHistory_('審査結果を確定しました（ログ ' + j.logs.length + ' 件をもう一度審査。確定日時 ' + at + '、局・クラブの行 ' + n + ' 行。' + judgeTimes_(j, startedAt) + '）');
+    logHistory_('審査結果を確定しました（ログ ' + j.logs.length + ' 件をもう一度審査。確定日時 ' + at + '、局・クラブの行 ' + n + ' 行。公開ログ ' + (pub.length - 1) + ' 交信。' + judgeTimes_(j, startedAt) + '）');
     writeResult_(j.result);
     ui.alert('ログ ' + j.logs.length + ' 件をもう一度審査して、審査結果を確定しました（確定日時 ' + at + '）。結果のページに出ます（すぐに出すときは、結果のページのメニュー「すぐに新しい内容にする」）。\n' +
       '「審査結果」「局別一覧」「要確認」のシートも、この審査の結果にしました。ログや局の一覧を直したときは、もう一度「審査結果を確定する」を実行してください。');
@@ -5292,7 +5354,7 @@ function menuConfirmResult() {
   }
 }
 
-/** メニュー「確定を取り消す」（管理用アカウントだけ）：「確定結果」シートを空にする（結果のページは「審査中です」に戻る） */
+/** メニュー「確定を取り消す」（管理用アカウントだけ）：「確定結果」「公開ログ」シートを空にする（結果のページは「審査中です」に戻る） */
 function menuCancelConfirm() {
   requireMailAccount_('確定の取り消し'); // 管理用アカウントだけ
   const ui = SpreadsheetApp.getUi();
@@ -5301,6 +5363,8 @@ function menuCancelConfirm() {
   const ok = ui.alert('確定を取り消す', '結果のページは「審査中です」に戻ります。よろしいですか？', ui.ButtonSet.OK_CANCEL);
   if (ok !== ui.Button.OK) return;
   sh.clear();
+  const pub = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_PUBLIC_LOG); // 公開ログも空にする（No.186）
+  if (pub) pub.clear();
   logHistory_('審査結果の確定を取り消しました');
   ui.alert('確定を取り消しました。結果のページは「審査中です」になります。');
 }
@@ -5486,6 +5550,7 @@ const BOOK_SHEETS = {
     { name: '審査結果', color: 'blue', protect: 'warning', empty: BOOK_NOT_JUDGED },
     { name: '局別一覧', color: 'blue', protect: 'warning', empty: BOOK_NOT_JUDGED },
     { name: '確定結果', color: 'blue', protect: 'owner' },
+    { name: '公開ログ', color: 'blue', protect: 'owner', header: function () { return typeof PUBLIC_LOG_HEADER !== 'undefined' ? PUBLIC_LOG_HEADER : null; } }, // 交信ログの公開（審査担当が確定のときに作る。見出しは 30_lcr.js。申し送り No.191）
     { name: '変更履歴', color: 'gray', protect: 'warning', header: function () { return ['日時', '操作した委員', '内容']; } }
   ],
   // 規約のファイル：よく変える順に左から（緑）、ほとんど変えないシートは右に（灰）。2026-11-07、指示書_テンプレートを空から始める の 2.4
@@ -5524,6 +5589,7 @@ const BOOK_LOG_FOLDER = '提出ログ'; // docs/ドライブのフォルダの�
 
 /**
  * 行の一覧。group：まとまりの見出しの行。label：項目。value：はじめの値（行がないときだけ入れる）。
+ * choices：選ぶ行のプルダウンの値（「1. 初期設定」で付ける）。
  * sample・endSample：JA0 VHF の値（テストのときだけ使う。settingsTemplateIsJa0_。コンテストごとに違う行は、テンプレートでは空にする）。
  * auto：自動で入る行（値の列の色を変える）。period：開催期間の行（B 開始・C 終了）。help：説明（D 列）
  * 行の名前は、ほかの担当の定数と同じにする（ORGANIZER_LABEL・MAIL_ACCOUNT_LABEL・CERT_SAMPLE_LABEL・GUIDE_*_LABEL・PUBLIC_REGISTRY_LABEL など）
@@ -5547,6 +5613,9 @@ const BASIC_ROWS = [
   { label: 'メールでの受付', value: '使わない', help: '初めは「使わない」（受付ページの提出だけを受け付ける。申し送り No.135）。「使う」なら、管理用アカウントのGmailに届いたメールのログを受け付ける。「使わない」なら受信トレイを読まず、受付ページ（ログ入力フォーム・アップロード）の提出だけを受け付ける' },
   { label: '受け付けるメールの宛先', value: '', help: '空なら、このGmailの受信トレイに届いたメールをすべて受け付ける（このアカウントでほかのコンテストも受け付けていると、そのログも取り込んでしまう）。ほかのコンテストと同じアカウントを使うときは、コンテストごとの宛先（例：ja0rl+ja0vhf@gmail.com）を入れると、その宛先に送られたメールだけを受け付ける' },
   { label: '受付番号の頭', value: '', sample: 'JA0VHF', help: '受付番号の「-」の前に付ける文字（例：JA0VHF とすると JA0VHF-001）。空なら 001 のように数字だけ' },
+  // 名前と選ぶ値は 11_settings.js の SETTINGS_LOG_PUBLICATION_LABEL・SETTINGS_LOG_PUBLICATION_CHOICES と同じ（このファイルは 11 なしで読まれることもあるので文字で書く）
+  { label: '交信ログの公開', value: '公開しない', choices: ['公開しない', '交信だけ公開', '審査の印も公開'],
+    help: '結果の確定後、結果ページで各局の交信ログを公開するか。公開すると、受付ページにもそのことが出ます（「交信だけ公開」は交信の行だけ、「審査の印も公開」は重複などの審査の印と得点も。名前・住所などは出しません）' },
   { group: BASIC_GROUP_FILES },
   { label: 'ファイルの種類', value: 'テンプレート', auto: true, help: 'テンプレートなら「テンプレート」、年ごとの審査用なら「審査用」。新年度の準備で作ったファイルには自動で「審査用」が入る' },
   { label: '管理用アカウント', value: '', auto: true, help: 'メールの処理・確定・初期設定などを動かせるアカウント（Googleアカウントのメールアドレス）。このファイルの持ち主と同じアカウントにする。空なら「1. 初期設定」で持ち主のアドレスが入る' },
@@ -5895,7 +5964,8 @@ function setupBasicSheet_(ss) {
   Object.keys(have).forEach(function (label) {
     if (!known[label]) rows.push([label, have[label].b, have[label].c, have[label].d]); // 一覧にない行（消さない）
   });
-  bookTry_(function () { sh.getDataRange().clearDataValidations(); });
+  // 全部のマスのプルダウンを外してから書く。表の外に残ったプルダウンに当たって止まらないように（申し送り No.192）
+  bookTry_(function () { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations(); });
   sh.clear();
   const n = rows.length;
   sh.getRange(1, 1, n, 4).setNumberFormat('@');
@@ -5909,6 +5979,8 @@ function setupBasicSheet_(ss) {
       if (!def) return;
       if (def.group) { sh.getRange(i + 1, 1, 1, 4).setBackground(BASIC_COLORS.group).setFontWeight('bold'); return; }
       if (def.auto) sh.getRange(i + 1, 2).setBackground(BASIC_COLORS.auto);
+      if (def.choices) sh.getRange(i + 1, 2).setDataValidation(SpreadsheetApp.newDataValidation() // 選ぶ行のプルダウン（交信ログの公開）
+        .requireValueInList(def.choices, true).setAllowInvalid(false).setHelpText(def.choices.join('・') + 'から選ぶ').build());
       if (!def.period) sh.getRange(i + 1, 3).setBackground(BASIC_COLORS.unusedC);
     });
   });
@@ -6051,22 +6123,43 @@ function setupSettingsSheets_(ss) {
   cfg.opTerms = terms;
   const tables = settingsTablesFromConfig(cfg);
   Object.keys(tables).forEach(function (name) {
-    const rows = tables[name];
-    let sh = ss.getSheetByName(name);
-    if (sh) migrateSettingsWords_(sh, name, terms); // もう一つの呼び方の言葉を、選んだ呼び方の言葉にする。足りない行を足す前に行う
-    if (!sh) {
-      sh = ss.insertSheet(name);
-      sh.getRange(1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
-      sh.getRange(1, 1, 1, rows[0].length).setFontWeight('bold');
-      sh.setFrozenRows(1);
-      SETTINGS_HEADERS[name].forEach(function (h, i) { sh.getRange(1, i + 1).setNote(h[1]); });
-    } else if (name === SETTINGS_SHEETS.basic || name === SETTINGS_SHEETS.divisions) {
-      addMissingSettingsRows_(sh, rows, name === SETTINGS_SHEETS.basic ? ['項目'] : ['部門', '項目']);
-    } else if (SETTINGS_OPTIONAL_COLUMNS[name]) {
-      addMissingSettingsColumns_(sh, name); // 前の版の「規約_種目」に「モード」「開催部門」の列を足す（11_settings.js）
+    try {
+      setupSettingsSheet_(ss, name, tables[name], terms);
+    } catch (e) { // どのシートで何が起きたかが分かる知らせにする（入力規則の説明の文だけが出ないように。申し送り No.192）
+      throw new Error('規約のファイルの「' + name + '」シートを整えられませんでした（' + String(e && e.message || e).replace(/^Exception:\s*/, '') + '）。' +
+        'シートの中身（とくに値の列）が、選べる値になっているかを確かめてから、もう一度「1. 初期設定」を実行してください');
     }
-    setupSettingsDropdowns_(sh, name, terms);
   });
+}
+
+/**
+ * 規約のファイルの1枚のシートを整える（setupSettingsSheets_ から）。ないシートは作る。あるシートは、まず全部のマスのプルダウン（入力規則）を外してから、
+ * 言葉の書き換え・足りない行や列の足し込みをし、最後にプルダウンを付け直す。
+ * プルダウンが付いたままだと、前の呼び方の一覧（例：「個人・社団」）にない値（「シングルオペ」）を書けずに止まるため（申し送り No.192）
+ */
+function setupSettingsSheet_(ss, name, rows, terms) {
+  let sh = ss.getSheetByName(name);
+  if (sh) {
+    settingsClearAllValidations_(sh);
+    migrateSettingsWords_(sh, name, terms); // もう一つの呼び方の言葉を、選んだ呼び方の言葉にする。足りない行を足す前に行う
+  }
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
+    sh.getRange(1, 1, 1, rows[0].length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    SETTINGS_HEADERS[name].forEach(function (h, i) { sh.getRange(1, i + 1).setNote(h[1]); });
+  } else if (name === SETTINGS_SHEETS.basic || name === SETTINGS_SHEETS.divisions) {
+    addMissingSettingsRows_(sh, rows, name === SETTINGS_SHEETS.basic ? ['項目'] : ['部門', '項目']);
+  } else if (SETTINGS_OPTIONAL_COLUMNS[name]) {
+    addMissingSettingsColumns_(sh, name); // 前の版の「規約_種目」に「モード」「開催部門」の列を足す（11_settings.js）
+  }
+  setupSettingsDropdowns_(sh, name, terms);
+}
+
+/** シートの全部のマス（中身のない所も）のプルダウン（入力規則）を外す */
+function settingsClearAllValidations_(sh) {
+  bookTry_(function () { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations(); });
 }
 
 /** 規約のファイル（ss）の「規約_基本」の「シングルオペ・マルチオペの呼び方」（'individualClub'・'singleMulti'）。行がない・空・読めないなら「個人／社団」 */
@@ -6348,7 +6441,7 @@ function settingsWriteTables_(ss, sss, tables) {
   SETTINGS_TEXT_SHEETS.forEach(function (name) {
     const rows = tables[name];
     let sh = sss.getSheetByName(name) || sss.insertSheet(name);
-    bookTry_(function () { sh.getDataRange().clearDataValidations(); });
+    settingsClearAllValidations_(sh); // 中身のない所に残ったプルダウンにも当たらないように（No.192）
     sh.clear();
     const w = Math.max.apply(null, rows.map(function (r) { return r.length; }));
     const vals = rows.map(function (r) { const x = r.map(settingsCellText); while (x.length < w) x.push(''); return x; });
@@ -6426,6 +6519,14 @@ function menuExportSettingsText() {
     '規約のシート' + SETTINGS_TEXT_SHEETS.length + '枚を書き出しました（規約のファイルと同じフォルダ）。<br>' +
     '<a href="' + escapeHtml_(out.getUrl()) + '" target="_blank">' + escapeHtml_(name) + '</a></div>').setWidth(460).setHeight(140);
   SpreadsheetApp.getUi().showModalDialog(html, '規約をテキストに書き出す');
+}
+
+/**
+ * 審査のファイル ss の「基本設定」の「交信ログの公開」（指示書_交信ログの公開 の 4.）。'none'＝公開しない、'qso'＝交信だけ公開、
+ * 'marks'＝審査の印も公開。行がない・空・知らない値は 'none'。Webページからも、ほかの年の審査のファイルを渡して使える
+ */
+function settingsLogPublicationFor_(ss) {
+  return settingsLogPublicationOf(settingsBasicValue_(ss, SETTINGS_LOG_PUBLICATION_LABEL));
 }
 // ===== 94_gas_certificate.js =====
 /**
@@ -6934,7 +7035,7 @@ const LOG_FOLDER_NAME = '提出ログ';
 
 // 新年度の準備で中身を空にするシート（決まったこと E）。空にし方は 91_gas_books.js の bookClearSheetFor_
 const NEW_YEAR_CLEAR = [
-  [BOOK_JUDGE, ['局の一覧', '要確認', '審査結果', '局別一覧', '確定結果', '変更履歴']],
+  [BOOK_JUDGE, ['局の一覧', '要確認', '審査結果', '局別一覧', '確定結果', '公開ログ', '変更履歴']], // 公開ログは前の年の交信ログを残さない（No.191）
   [BOOK_MAIL, ['案内メール', '受付履歴', 'LCR送信', '参加証送信']]
 ];
 const NEW_YEAR_FOLDER_RE = /^(\d{4})_第(\d+)回$/;
@@ -7158,6 +7259,12 @@ function newYearSetup(form) {
   const certSample = certSampleForNewYear_(basicValue_(CERT_SAMPLE_LABEL), copies, newFolder, year); // 参加証の見本を年度フォルダのコピーにつなぎ直す（94_gas_certificate.js）
   if (certSample) setBasicValue_(nss, CERT_SAMPLE_LABEL, certSample);
   setBasicValue_(nss, GUIDE_PREV_LABEL, /[-\w]{25,}/.test(String(form.prev || '')) ? String(form.prev).trim() : ''); // 前の年の審査のファイル（99_gas_guidemail.js）
+  // 交信ログの公開は、前の年の値を引き継ぐ（前の年のファイルが開けなければ、テンプレートの値のまま。指示書_交信ログの公開 の 4.）
+  const prevId = /[-\w]{25,}/.exec(String(form.prev || ''));
+  if (prevId) bookTry_(function () {
+    const pv = settingsBasicValue_(SpreadsheetApp.openById(prevId[0]), SETTINGS_LOG_PUBLICATION_LABEL);
+    if (pv) setBasicValue_(nss, SETTINGS_LOG_PUBLICATION_LABEL, pv);
+  });
 
   // 3. シートの中身を空にする（シートは消さない。決まったこと E）
   settingsSpreadsheetCache_ = null; // 新しいファイルのつながりで開き直す
